@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AIAdvisorChat } from '../components/AIAdvisorChat';
+import { ImageRecognitionButton } from '../components/ImageRecognitionButton';
+import { SmartRecommendations } from '../components/SmartRecommendations';
+import { RiskDashboard } from '../components/RiskDashboard';
 
 function PlusIcon(props) {
   return (
@@ -584,6 +588,14 @@ export default function HomePage() {
               >
                 {loading ? '添加中…' : '添加'}
               </button>
+              {/* 图片识别按钮 */}
+              <ImageRecognitionButton
+                onAddFund={addFundFromSearch}
+                existingFunds={funds.map(f => f.code)}
+              />
+            </div>
+            <div className="muted" style={{ marginTop: 8, fontSize: '12px' }}>
+              支持截图识别添加（支付宝/天天基金截图）
             </div>
           </div>
 
@@ -733,7 +745,33 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* 智能推荐组件 - 仅在没有基金时显示 */}
+      {funds.length === 0 && (
+        <div className="grid">
+          <div className="col-12">
+            <SmartRecommendations />
+          </div>
+        </div>
+      )}
+
+      {/* 风险分析仪表板 - 仅在有基金时显示 */}
+      {funds.length > 0 && (
+        <div className="grid">
+          <div className="col-12">
+            <div className="glass card" style={{ padding: '20px' }}>
+              <h2 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: 600 }}>
+                风险分析
+              </h2>
+              <RiskDashboard funds={funds} />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="footer">数据源：实时估值与重仓直连东方财富，无需后端，部署即用</div>
+
+      {/* AI 聊天组件 */}
+      <AIAdvisorChat />
 
       {settingsOpen && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="设置" onClick={() => setSettingsOpen(false)}>
