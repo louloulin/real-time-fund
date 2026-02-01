@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 function PlusIcon(props) {
   return (
@@ -74,11 +75,19 @@ function Stat({ label, value, delta }) {
 
 export default function HomePage() {
   const [funds, setFunds] = useState([]);
-  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const timerRef = useRef(null);
-  
+  const searchDebounceRef = useRef(null);
+
+  // 搜索相关状态
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchInputRef = useRef(null);
+  const [searchPosition, setSearchPosition] = useState({ top: 0, left: 0 });
+
   // 刷新频率状态
   const [refreshMs, setRefreshMs] = useState(30000);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -311,32 +320,6 @@ export default function HomePage() {
     }
   };
 
-  const addFund = async (e) => {
-    e.preventDefault();
-    setError('');
-    const clean = code.trim();
-    if (!clean) {
-      setError('请输入基金编号');
-      return;
-    }
-    if (funds.some((f) => f.code === clean)) {
-      setError('该基金已添加');
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await fetchFundData(clean);
-      const next = [data, ...funds];
-      setFunds(next);
-      localStorage.setItem('funds', JSON.stringify(next));
-      setCode('');
-    } catch (e) {
-      setError(e.message || '添加失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const removeFund = (removeCode) => {
     const next = funds.filter((f) => f.code !== removeCode);
     setFunds(next);
@@ -377,13 +360,138 @@ export default function HomePage() {
     setSettingsOpen(false);
   };
 
+  // 搜索基金（带防抖）
+  const searchFunds = async (keyword) => {
+    // 清除之前的定时器
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    if (!keyword.trim()) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      setSearchLoading(false);
+      return;
+    }
+
+    // 设置防抖延迟
+    searchDebounceRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        // 使用天天基金网的搜索接口
+        // 返回格式: var r = [["基金代码","基金简称","基金类型","拼音"],...]
+        const url = `https://fund.eastmoney.com/js/fundcode_search.js?timestamp=${Date.now()}`;
+
+        const data = await new Promise((resolve) => {
+          const script = document.createElement('script');
+
+          // 东方财富接口会将结果赋值给 window.r
+          // 脚本加载完成后，window.r 会被设置
+          script.onload = () => {
+            // 直接从 window.r 获取数据
+            const result = window.r || [];
+            // 移除脚本标签
+            if (document.body.contains(script)) {
+              document.body.removeChild(script);
+            }
+            resolve(result);
+          };
+
+          script.onerror = () => {
+            if (document.body.contains(script)) {
+              document.body.removeChild(script);
+            }
+            resolve([]);
+          };
+
+          script.src = url;
+          document.body.appendChild(script);
+        });
+
+        if (Array.isArray(data)) {
+          // 过滤匹配的结果
+          const filtered = data.filter(fund => {
+            const code = fund[0] || '';
+            const name = fund[2] || '';
+            const pinyin = fund[3] || '';
+            return code.includes(keyword) ||
+                   name.toLowerCase().includes(keyword.toLowerCase()) ||
+                   pinyin.toLowerCase().includes(keyword.toLowerCase());
+          }).slice(0, 20); // 限制结果数量
+
+          setSearchResults(filtered.map(fund => ({
+            code: fund[0],
+            name: fund[2],
+            type: fund[3]
+          })));
+
+          // 计算搜索框位置用于定位下拉列表
+          if (searchInputRef.current) {
+            const rect = searchInputRef.current.getBoundingClientRect();
+            setSearchPosition({
+              top: rect.bottom + 8,
+              left: rect.left + rect.width / 2
+            });
+          }
+          setShowSearchResults(true);
+        }
+      } catch (e) {
+        console.error('搜索失败', e);
+        setSearchResults([]);
+        setShowSearchResults(true);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300); // 300ms 防抖延迟
+  };
+
+  // 添加基金（支持搜索结果或直接代码）
+  const addFundFromSearch = async (fundCode) => {
+    if (funds.some((f) => f.code === fundCode)) {
+      setError('该基金已添加');
+      setShowSearchResults(false);
+      setSearchKeyword('');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const data = await fetchFundData(fundCode);
+      const next = [data, ...funds];
+      setFunds(next);
+      localStorage.setItem('funds', JSON.stringify(next));
+      setShowSearchResults(false);
+      setSearchKeyword('');
+    } catch (e) {
+      setError(e.message || '添加失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const onKey = (ev) => {
       if (ev.key === 'Escape' && settingsOpen) setSettingsOpen(false);
+      if (ev.key === 'Escape' && showSearchResults) {
+        setShowSearchResults(false);
+        setSearchKeyword('');
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [settingsOpen]);
+  }, [settingsOpen, showSearchResults]);
+
+  // 点击外部关闭搜索结果
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showSearchResults && !e.target.closest('.search-results') && !e.target.closest('.input')) {
+        setShowSearchResults(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSearchResults]);
 
   return (
     <div className="container content">
@@ -427,20 +535,90 @@ export default function HomePage() {
           <div className="title" style={{ marginBottom: 12 }}>
             <PlusIcon width="20" height="20" />
             <span>添加基金</span>
-            <span className="muted">输入基金编号（例如：110022）</span>
+            <span className="muted">输入基金名称搜索，或直接输入代码（如110022）回车添加</span>
           </div>
-          <form className="form" onSubmit={addFund}>
-            <input
-              className="input"
-              placeholder="基金编号"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              inputMode="numeric"
-            />
-            <button className="button" type="submit" disabled={loading}>
-              {loading ? '添加中…' : '添加'}
-            </button>
-          </form>
+
+          <div style={{ position: 'relative' }} ref={searchInputRef}>
+            <div className="form">
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  className="input"
+                  placeholder="基金名称或代码..."
+                  value={searchKeyword}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSearchKeyword(value);
+                    searchFunds(value);
+                  }}
+                  onKeyDown={(e) => {
+                    // 纯数字代码按回车直接添加
+                    if (e.key === 'Enter' && /^\d{6}$/.test(searchKeyword.trim())) {
+                      e.preventDefault();
+                      addFundFromSearch(searchKeyword.trim());
+                    }
+                  }}
+                />
+                {searchLoading && (
+                  <div style={{
+                    position: 'absolute',
+                    right: '14px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--muted)',
+                    fontSize: '12px'
+                  }}>
+                    搜索中...
+                  </div>
+                )}
+              </div>
+              <button
+                className="button"
+                type="button"
+                onClick={() => {
+                  // 纯数字代码直接添加
+                  if (/^\d{6}$/.test(searchKeyword.trim())) {
+                    addFundFromSearch(searchKeyword.trim());
+                  }
+                }}
+                disabled={loading || !searchKeyword.trim()}
+              >
+                {loading ? '添加中…' : '添加'}
+              </button>
+            </div>
+          </div>
+
+          {/* 搜索结果下拉框 - 使用 Portal 渲染到 body */}
+          {showSearchResults && typeof document !== 'undefined' && createPortal(
+            <div className="search-results" style={{ top: `${searchPosition.top}px`, left: `${searchPosition.left}px` }}>
+              {searchResults.length > 0 ? (
+                searchResults.map((fund) => (
+                  <div
+                    key={fund.code}
+                    className="search-result-item"
+                    onClick={() => addFundFromSearch(fund.code)}
+                    onMouseDown={(e) => {
+                      // 防止点击事件被 input 的 blur 事件阻止
+                      e.preventDefault();
+                    }}
+                  >
+                    <div className="search-result-info">
+                      <span className="search-result-name">{fund.name}</span>
+                      <span className="muted">#{fund.code}</span>
+                    </div>
+                    {funds.some(f => f.code === fund.code) && (
+                      <span className="search-result-added">已添加</span>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="search-results-empty">
+                  <div className="muted">未找到匹配的基金</div>
+                </div>
+              )}
+            </div>,
+            document.body
+          )}
+
           {error && <div className="muted" style={{ marginTop: 8, color: 'var(--danger)' }}>{error}</div>}
         </div>
 
