@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { EnhancedAIChat } from '../components/EnhancedAIChat';
+import { AssistantUIChat } from '../components/AssistantUIChat';
 import { ImageRecognitionButton } from '../components/ImageRecognitionButton';
 import { SmartRecommendations } from '../components/SmartRecommendations';
 import { RiskDashboard } from '../components/RiskDashboard';
@@ -476,7 +477,7 @@ export default function HomePage() {
             const rect = searchInputRef.current.getBoundingClientRect();
             setSearchPosition({
               top: rect.bottom + 8,
-              left: rect.left + rect.width / 2
+              left: rect.left
             });
           }
           setShowSearchResults(true);
@@ -608,6 +609,20 @@ export default function HomePage() {
                       addFundFromSearch(searchKeyword.trim());
                     }
                   }}
+                  style={{
+                    ...(showSearchResults ? {
+                      borderColor: '#22d3ee',
+                      boxShadow: '0 0 0 3px rgba(34, 211, 238, 0.1)'
+                    } : {})
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#22d3ee';
+                  }}
+                  onBlur={(e) => {
+                    if (!showSearchResults) {
+                      e.target.style.borderColor = 'var(--border)';
+                    }
+                  }}
                 />
                 {searchLoading && (
                   <div style={{
@@ -615,9 +630,21 @@ export default function HomePage() {
                     right: '14px',
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    color: 'var(--muted)',
-                    fontSize: '12px'
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: '#22d3ee',
+                    fontSize: '12px',
+                    fontWeight: 500
                   }}>
+                    <div style={{
+                      width: '14px',
+                      height: '14px',
+                      border: '2px solid rgba(34, 211, 238, 0.3)',
+                      borderTopColor: '#22d3ee',
+                      borderRadius: '50%',
+                      animation: 'spin 0.8s linear infinite'
+                    }}></div>
                     搜索中...
                   </div>
                 )}
@@ -877,8 +904,8 @@ export default function HomePage() {
 
       <div className="footer">数据源：实时估值与重仓直连东方财富，无需后端，部署即用</div>
 
-      {/* AI 聊天组件 - 使用增强版 */}
-      <EnhancedAIChat funds={funds} />
+      {/* AI 聊天组件 - 使用 assistant-ui */}
+      <AssistantUIChat funds={funds} />
 
       {/* 基金详情弹窗 */}
       {showDetailModal && selectedFund && (

@@ -188,8 +188,12 @@ export function EnhancedAIChat({ funds = [] }: EnhancedAIChatProps) {
                 break;
 
               case 'content':
-                // 流式内容更新
+                // 流式内容更新 - 开始接收内容时清除工具调用指示器
                 aiMessage.content += data.content;
+                // 清除 tool_calls，这样 "🔧 使用工具获取数据..." 指示器会被隐藏
+                if (aiMessage.tool_calls) {
+                  aiMessage.tool_calls = undefined;
+                }
                 break;
 
               case 'done':

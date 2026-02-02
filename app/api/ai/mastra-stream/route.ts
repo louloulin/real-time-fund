@@ -108,18 +108,19 @@ export async function POST(request: NextRequest) {
 
               case 'reasoning-delta':
                 // 推理过程 - 对于GLM模型，推理可能包含实际回复内容
-                // 我们可以选择性发送推理内容
-                if (value.textDelta) {
+                // Mastra返回的字段可能是 textDelta 或 delta
+                const reasoningContent = value.textDelta || value.delta || value.content || '';
+                if (reasoningContent) {
                   controller.enqueue(encoder.encode(JSON.stringify({
                     type: 'content',
-                    content: value.textDelta
+                    content: reasoningContent
                   }) + '\n'));
                 }
                 break;
 
               default:
-                // 其他未知类型，记录日志但不影响流程
-                console.log('Unknown chunk type:', value.type);
+                // 其他未知类型，记录完整chunk以便调试
+                console.log('Unknown chunk type:', value.type, 'Full chunk:', JSON.stringify(value).slice(0, 200));
                 break;
             }
           }

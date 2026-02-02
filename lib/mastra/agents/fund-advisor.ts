@@ -93,17 +93,130 @@ export const getMarketOverviewTool = createTool({
   description: '获取当前市场概况，包括主要指数表现、市场情绪等',
   inputSchema: z.object({}),
   execute: async () => {
-    return {
-      success: true,
-      overview: {
-        date: new Date().toLocaleDateString('zh-CN'),
-        shanghai: '+0.52%',
-        shenzhen: '+0.38%',
-        sentiment: '谨慎乐观',
-        hotSectors: ['新能源', '半导体', '医药生物'],
-        advice: '当前市场震荡，建议分批建仓，长期持有优质基金',
-      },
-    };
+    try {
+      // 使用东方财富指数API获取数据
+      // API格式: http://push2.eastmoney.com/api/qt/stock/get?secid=1.000001&fields=f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f57,f58,f60,f107,f116,f117,f127,f152
+      // 返回JSON格式，更稳定可靠
+
+      const fetchIndexData = async (secid: string, name: string) => {
+        const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f43,f44,f45,f46,f60,f107&flt=1`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data || !data.data || data.data.length === 0) return null;
+
+        const item = data.data;
+        // f43: 最新价, f44: 最高价, f45: 最低价, f46: 今开价, f60: 昨收价
+        // 注意：东方财富API返回的指数数据需要除以100
+        const current = (item.f43 || 0) / 100;
+        const high = (item.f44 || 0) / 100;
+        const low = (item.f45 || 0) / 100;
+        const open = (item.f46 || 0) / 100;
+        const prevClose = (item.f60 || 0) / 100;
+
+        const change = current - prevClose;
+        const percent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+
+        return {
+          name,
+          current,
+          change,
+          percent,
+          open,
+          high,
+          low,
+          prevClose,
+        };
+      };
+
+      // secid格式: 1.000001(上海上证), 0.399001(深圳成指), 0.399006(创业板)
+      const [shanghaiData, shenzhenData, cybData] = await Promise.all([
+        fetchIndexData('1.000001', '上证指数'),
+        fetchIndexData('0.399001', '深证成指'),
+        fetchIndexData('0.399006', '创业板指'),
+      ]);
+
+      // 判断市场情绪
+      const avgPercent = ((shanghaiData?.percent || 0) + (shenzhenData?.percent || 0) + (cybData?.percent || 0)) / 3;
+      let sentiment = '中性';
+      let sentimentEmoji = '😐';
+      if (avgPercent > 1) {
+        sentiment = '强势';
+        sentimentEmoji = '🚀';
+      } else if (avgPercent > 0.3) {
+        sentiment = '乐观';
+        sentimentEmoji = '😊';
+      } else if (avgPercent < -1) {
+        sentiment = '弱势';
+        sentimentEmoji = '😰';
+      } else if (avgPercent < -0.3) {
+        sentiment = '悲观';
+        sentimentEmoji = '😟';
+      }
+
+      // 根据指数表现生成热点板块和建议
+      let hotSectors: string[] = [];
+      let advice = '';
+
+      if (avgPercent > 0.5) {
+        hotSectors = ['科技成长', '新能源', '人工智能'];
+        advice = '市场表现强势，可适当增加权益类基金配置，关注成长板块机会';
+      } else if (avgPercent > 0) {
+        hotSectors = ['消费', '医药', '金融'];
+        advice = '市场震荡上行，建议均衡配置，关注优质价值基金';
+      } else if (avgPercent > -0.5) {
+        hotSectors = ['防御性板块', '公用事业', '红利低波'];
+        advice = '市场震荡调整，建议控制仓位，关注防御性品种';
+      } else {
+        hotSectors = ['现金管理', '债券基金', '货币基金'];
+        advice = '市场调整明显，建议以防守为主，等待更好的入场时机';
+      }
+
+      return {
+        success: true,
+        overview: {
+          date: new Date().toLocaleDateString('zh-CN'),
+          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          shanghai: shanghaiData ? {
+            name: '上证指数',
+            current: shanghaiData.current.toFixed(2),
+            change: shanghaiData.change.toFixed(2),
+            percent: (shanghaiData.percent > 0 ? '+' : '') + shanghaiData.percent.toFixed(2) + '%',
+          } : null,
+          shenzhen: shenzhenData ? {
+            name: '深证成指',
+            current: shenzhenData.current.toFixed(2),
+            change: shenzhenData.change.toFixed(2),
+            percent: (shenzhenData.percent > 0 ? '+' : '') + shenzhenData.percent.toFixed(2) + '%',
+          } : null,
+          cyb: cybData ? {
+            name: '创业板指',
+            current: cybData.current.toFixed(2),
+            change: cybData.change.toFixed(2),
+            percent: (cybData.percent > 0 ? '+' : '') + cybData.percent.toFixed(2) + '%',
+          } : null,
+          sentiment: `${sentimentEmoji} ${sentiment}`,
+          hotSectors,
+          advice,
+        },
+      };
+    } catch (error) {
+      console.error('获取市场数据失败:', error);
+      // 失败时返回基础数据
+      return {
+        success: false,
+        overview: {
+          date: new Date().toLocaleDateString('zh-CN'),
+          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          shanghai: null,
+          shenzhen: null,
+          cyb: null,
+          sentiment: '😐 数据获取失败',
+          hotSectors: [],
+          advice: '暂时无法获取实时市场数据，请稍后再试',
+        },
+      };
+    }
   },
 });
 
