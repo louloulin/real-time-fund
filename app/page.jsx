@@ -515,7 +515,11 @@ export default function HomePage() {
           if (proxyResponse.ok) {
             const proxyData = await proxyResponse.json();
             if (proxyData.success && proxyData.data) {
-              data = proxyData.data;
+              // 代理 API 返回的已经是处理好的对象数组
+              setSearchResults(proxyData.data);
+              setShowSearchResults(true);
+              setSearchLoading(false);
+              return; // 直接返回，不需要后续处理
             }
           }
         } catch (proxyError) {
@@ -523,31 +527,29 @@ export default function HomePage() {
         }
 
         // 降级到 JSONP 方式
-        if (!data.length) {
-          const url = `https://fund.eastmoney.com/js/fundcode_search.js?timestamp=${Date.now()}`;
+        const url = `https://fund.eastmoney.com/js/fundcode_search.js?timestamp=${Date.now()}`;
 
-          data = await new Promise((resolve) => {
-            const script = document.createElement('script');
+        data = await new Promise((resolve) => {
+          const script = document.createElement('script');
 
-            script.onload = () => {
-              const result = window.r || [];
-              if (document.body.contains(script)) {
-                document.body.removeChild(script);
-              }
-              resolve(result);
-            };
+          script.onload = () => {
+            const result = window.r || [];
+            if (document.body.contains(script)) {
+              document.body.removeChild(script);
+            }
+            resolve(result);
+          };
 
-            script.onerror = () => {
-              if (document.body.contains(script)) {
-                document.body.removeChild(script);
-              }
-              resolve([]);
-            };
+          script.onerror = () => {
+            if (document.body.contains(script)) {
+              document.body.removeChild(script);
+            }
+            resolve([]);
+          };
 
-            script.src = url;
-            document.body.appendChild(script);
-          });
-        }
+          script.src = url;
+          document.body.appendChild(script);
+        });
 
         if (Array.isArray(data)) {
           // 数据格式: [code, pinyin, name, type, ...]
