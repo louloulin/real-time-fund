@@ -330,7 +330,94 @@ export function FullScreenAssistantUIChat({ funds = [] }: AssistantUIChatProps) 
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // ... 类似的实现，这里省略重复代码
+  const handleSendMessage = async (content: string) => {
+    if (!content.trim() || isLoading) return;
+
+    const userMessage: Message = {
+      id: `msg_${Date.now()}`,
+      role: 'user',
+      content: content.trim(),
+      timestamp: Date.now(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInputValue('');
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/assistant-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [...messages, userMessage] }),
+      });
+
+      if (!response.ok) throw new Error('Failed to get response');
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        let assistantMessage = '';
+        const assistantMessageId = `msg_${Date.now()}_assistant`;
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: assistantMessageId,
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+          },
+        ]);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              try {
+                const data = JSON.parse(line.slice(5));
+                if (data.type === 'text-delta' && data.textDelta) {
+                  assistantMessage += data.textDelta;
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: assistantMessage }
+                        : msg
+                    )
+                  );
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Send message error:', error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg_${Date.now()}_error`,
+          role: 'assistant',
+          content: '抱歉，发生了错误。请稍后重试。',
+          timestamp: Date.now(),
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 自动滚动到底部
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   return (
     <div className="h-screen flex flex-col bg-background">

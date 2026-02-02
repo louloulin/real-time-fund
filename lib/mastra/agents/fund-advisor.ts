@@ -1,7 +1,8 @@
 /**
- * 真正的 Mastra Agent 实现
+ * 基金投资顾问 Agent
  *
- * 基于 Mastra Core 官方文档的实现
+ * 基于 Mastra 1.1.0 官方文档实现
+ * https://mastra.ai/docs/agents/overview
  */
 
 import { Agent } from '@mastra/core/agent';
@@ -9,16 +10,14 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 /**
- * 智谱AI GLM 模型配置
+ * 模型 ID
  *
- * Mastra Agent 支持的 OpenAI 兼容配置格式
+ * Mastra 1.1.0 提供原生的 zhipuai 提供商支持
+ * https://mastra.ai/models/providers/zhipuai
  */
-const zhipuGLMModel = {
-  providerId: 'openai-compatible',
-  modelId: 'glm-4.5-air',
-  url: 'https://open.bigmodel.cn/api/coding/paas/v4',
-  apiKey: process.env.ZHIPU_API_KEY || '',
-};
+const MODEL_ID = process.env.ZHIPU_API_KEY
+  ? 'zhipuai/glm-4.5-air'
+  : 'openai/gpt-4.1-mini';
 
 /**
  * 工具1: 搜索基金
@@ -29,7 +28,9 @@ export const searchFundsTool = createTool({
   inputSchema: z.object({
     keyword: z.string().describe('搜索关键词，可以是基金代码、基金名称或拼音缩写'),
   }),
-  execute: async ({ keyword }) => {
+  execute: async (inputData) => {
+    const { keyword } = inputData;
+
     const mockFunds = [
       { code: '000001', name: '华夏成长混合', type: '混合型', nav: '1.234', change: 1.23 },
       { code: '110022', name: '易方达消费行业', type: '股票型', nav: '2.567', change: -0.45 },
@@ -62,7 +63,8 @@ export const analyzePortfolioTool = createTool({
       .string()
       .describe('用户持有的基金代码列表，用逗号分隔，如: 000001,110022'),
   }),
-  execute: async ({ funds }) => {
+  execute: async (inputData) => {
+    const { funds } = inputData;
     const fundList = funds.split(',').map((f) => f.trim()).filter((f) => f);
 
     return {
@@ -94,10 +96,6 @@ export const getMarketOverviewTool = createTool({
   inputSchema: z.object({}),
   execute: async () => {
     try {
-      // 使用东方财富指数API获取数据
-      // API格式: http://push2.eastmoney.com/api/qt/stock/get?secid=1.000001&fields=f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f57,f58,f60,f107,f116,f117,f127,f152
-      // 返回JSON格式，更稳定可靠
-
       const fetchIndexData = async (secid: string, name: string) => {
         const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f43,f44,f45,f46,f60,f107&flt=1`;
         const response = await fetch(url);
@@ -106,8 +104,6 @@ export const getMarketOverviewTool = createTool({
         if (!data || !data.data || data.data.length === 0) return null;
 
         const item = data.data;
-        // f43: 最新价, f44: 最高价, f45: 最低价, f46: 今开价, f60: 昨收价
-        // 注意：东方财富API返回的指数数据需要除以100
         const current = (item.f43 || 0) / 100;
         const high = (item.f44 || 0) / 100;
         const low = (item.f45 || 0) / 100;
@@ -129,14 +125,12 @@ export const getMarketOverviewTool = createTool({
         };
       };
 
-      // secid格式: 1.000001(上海上证), 0.399001(深圳成指), 0.399006(创业板)
       const [shanghaiData, shenzhenData, cybData] = await Promise.all([
         fetchIndexData('1.000001', '上证指数'),
         fetchIndexData('0.399001', '深证成指'),
         fetchIndexData('0.399006', '创业板指'),
       ]);
 
-      // 判断市场情绪
       const avgPercent = ((shanghaiData?.percent || 0) + (shenzhenData?.percent || 0) + (cybData?.percent || 0)) / 3;
       let sentiment = '中性';
       let sentimentEmoji = '😐';
@@ -154,7 +148,6 @@ export const getMarketOverviewTool = createTool({
         sentimentEmoji = '😟';
       }
 
-      // 根据指数表现生成热点板块和建议
       let hotSectors: string[] = [];
       let advice = '';
 
@@ -202,7 +195,6 @@ export const getMarketOverviewTool = createTool({
       };
     } catch (error) {
       console.error('获取市场数据失败:', error);
-      // 失败时返回基础数据
       return {
         success: false,
         overview: {
@@ -230,7 +222,9 @@ export const analyzeFundDeeplyTool = createTool({
     fundCode: z.string().describe('基金代码，如 110022'),
     fundName: z.string().describe('基金名称，如 易方达消费行业股票'),
   }),
-  execute: async ({ fundCode, fundName }) => {
+  execute: async (inputData) => {
+    const { fundCode, fundName } = inputData;
+
     const theories = [
       {
         name: '现代投资组合理论 (MPT)',
@@ -299,7 +293,8 @@ export const searchFundResearchTool = createTool({
     fundCode: z.string().describe('基金代码，如 110022'),
     fundName: z.string().describe('基金名称，如 易方达消费行业股票'),
   }),
-  execute: async ({ fundCode, fundName }) => {
+  execute: async (inputData) => {
+    const { fundCode, fundName } = inputData;
     return {
       success: true,
       research: formatResearchReport(fundCode, fundName),
@@ -326,7 +321,9 @@ export const analyzeFundWithTheoryTool = createTool({
       .enum(['mpt', 'capm', 'fama-french', 'technical', 'fundamental'])
       .describe('分析理论类型'),
   }),
-  execute: async ({ fundCode, fundName, theory }) => {
+  execute: async (inputData) => {
+    const { fundCode, fundName, theory } = inputData;
+
     const theoryNames: Record<string, string> = {
       mpt: '现代投资组合理论 (MPT)',
       capm: 'CAPM 资本资产定价模型',
@@ -337,11 +334,11 @@ export const analyzeFundWithTheoryTool = createTool({
 
     return {
       success: true,
-      analysis: `## ${theoryNames[itheory] || theory} 分析
+      analysis: `## ${theoryNames[theory] || theory} 分析
 
 ### ${fundName}(${fundCode})
 
-基于 ${theoryNames[itheory] || theory} 的分析框架，该基金当前表现如下：
+基于 ${theoryNames[theory] || theory} 的分析框架，该基金当前表现如下：
 
 - **评分**: 68/100
 - **风险等级**: 中等
@@ -363,7 +360,9 @@ export const runFundAnalysisWorkflowTool = createTool({
     fundCode: z.string().describe('基金代码，如 110022'),
     fundName: z.string().describe('基金名称，如 易方达消费行业股票'),
   }),
-  execute: async ({ fundCode, fundName }) => {
+  execute: async (inputData) => {
+    const { fundCode, fundName } = inputData;
+
     return {
       success: true,
       workflow: `## 🔄 ${fundName}(${fundCode}) 完整分析工作流
@@ -505,7 +504,8 @@ export const fundTools = {
 /**
  * 创建基金投资顾问 Agent
  *
- * 基于 Mastra 官方文档的真正实现
+ * 基于 Mastra 1.1.0 官方文档实现
+ * https://mastra.ai/docs/agents/overview
  */
 export const fundAdvisorAgent = new Agent({
   id: 'fund-advisor',
@@ -538,6 +538,8 @@ export const fundAdvisorAgent = new Agent({
 - 必须使用工具来获取准确的基金信息
 - 不要编造基金代码或数据
 - 如果工具返回错误，诚实地告诉用户`,
-  model: zhipuGLMModel,
+  // Mastra 原生 zhipuai 提供商
+  // https://mastra.ai/models/providers/zhipuai
+  model: MODEL_ID,
   tools: fundTools,
 });

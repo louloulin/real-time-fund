@@ -5,7 +5,46 @@
  */
 
 import { MultiFactorScorer, FundData, FundScore } from '../scoring/multi-factor';
-import { searchFundsEastmoney } from '../mastra/agents/fund-search';
+
+// 内部搜索函数 - 直接使用 JSONP 获取东方财富数据
+async function searchFundsEastmoney(keyword?: string) {
+  try {
+    const url = `https://fund.eastmoney.com/js/fundcode_search.js?timestamp=${Date.now()}`;
+    
+    // 使用 JSONP 方式获取数据
+    const response = await fetch(url);
+    const text = await response.text();
+
+    // 解析返回的数据（格式: var r = [...]）
+    const match = text.match(/var r = (\[.*?\]);/);
+    if (!match) {
+      return [];
+    }
+
+    const fundsData = JSON.parse(match[1]);
+
+    // 如果有关键词，进行过滤
+    if (keyword) {
+      return fundsData
+        .filter((fund: any[]) => {
+          const code = fund[0] || '';
+          const name = fund[2] || '';
+          const pinyin = fund[1] || '';
+          return (
+            code.includes(keyword) ||
+            name.toLowerCase().includes(keyword.toLowerCase()) ||
+            pinyin.toLowerCase().includes(keyword.toLowerCase())
+          );
+        })
+        .slice(0, 50);
+    }
+
+    return fundsData.slice(0, 50);
+  } catch (error) {
+    console.error('搜索基金失败:', error);
+    return [];
+  }
+}
 
 export interface UserPreferences {
   riskTolerance: 'conservative' | 'moderate' | 'aggressive';

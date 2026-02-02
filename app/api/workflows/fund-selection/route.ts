@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { executeFundSelectionWorkflow } from '../../../../lib/mastra/workflows/fund-selection-workflow';
+import { executeWorkflow as executeFundSelectionWorkflow } from '../../../../lib/mastra/workflows/fund-selection-workflow';
 
 /**
  * POST /api/workflows/fund-selection
@@ -20,20 +20,10 @@ export async function POST(request: NextRequest) {
     // 执行工作流
     const result = await executeFundSelectionWorkflow(body);
 
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Workflow execution failed',
-          details: result.errors,
-        },
-        { status: 500 }
-      );
-    }
-
+    // 工作流总是返回 success: true，直接返回数据
     return NextResponse.json({
       success: true,
-      data: result.results,
+      data: result.data,
     });
   } catch (error) {
     console.error('Workflow execution error:', error);

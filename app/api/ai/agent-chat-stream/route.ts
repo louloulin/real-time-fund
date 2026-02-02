@@ -5,6 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { searchFundsReal, getFundDetailsReal } from '@/lib/api/fund-api-real';
 
 // 工具定义
 const TOOLS = [
@@ -374,11 +375,11 @@ async function analyzeFundWithTheory(fundCode: string, fundName: string, theory:
 
     return {
       success: true,
-      analysis: `## ${theoryNames[itheory] || theory} 分析
+      analysis: `## ${theoryNames[theory] || theory} 分析
 
 ### ${fundName}(${fundCode})
 
-基于 ${theoryNames[itheory] || theory} 的分析框架，该基金当前表现如下：
+基于 ${theoryNames[theory] || theory} 的分析框架，该基金当前表现如下：
 
 - **评分**: 68/100
 - **风险等级**: 中等

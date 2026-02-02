@@ -51,7 +51,7 @@ export function MarkdownText({ children }: MarkdownTextProps) {
         if (match) {
           const level = match[1].length;
           const content = match[2];
-          const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+          const Tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
           elements.push(
             <Tag key={i} className={`font-bold mt-4 mb-2 ${level === 1 ? 'text-2xl' : level === 2 ? 'text-xl' : 'text-lg'}`}>
               {content}

@@ -47,11 +47,11 @@ export async function POST(request: NextRequest) {
             // 处理不同类型的 chunk
             switch (value.type) {
               case 'text-delta':
-                // 文本增量
-                if (value.textDelta) {
+                // 文本增量 - Mastra 使用 payload.text 结构
+                if (value.payload?.text) {
                   controller.enqueue(encoder.encode(JSON.stringify({
                     type: 'content',
-                    content: value.textDelta
+                    content: value.payload.text
                   }) + '\n'));
                 }
                 break;
@@ -88,10 +88,10 @@ export async function POST(request: NextRequest) {
                 break;
 
               case 'error':
-                // 错误
+                // 错误 - Mastra 使用 payload.error 结构
                 controller.enqueue(encoder.encode(JSON.stringify({
                   type: 'error',
-                  error: value.error
+                  error: value.payload?.error
                 }) + '\n'));
                 break;
 
@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
 
               case 'reasoning-delta':
                 // 推理过程 - 对于GLM模型，推理可能包含实际回复内容
-                // Mastra返回的字段可能是 textDelta 或 delta
-                const reasoningContent = value.textDelta || value.delta || value.content || '';
+                // Mastra 返回的字段是 payload.text
+                const reasoningContent = value.payload?.text || '';
                 if (reasoningContent) {
                   controller.enqueue(encoder.encode(JSON.stringify({
                     type: 'content',

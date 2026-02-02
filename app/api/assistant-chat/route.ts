@@ -16,7 +16,7 @@ export const maxDuration = 30;
  * Mastra 的 agent.stream() 返回 MastraModelOutput，它有 textStream 属性
  * textStream 是 ReadableStream<string>，所以 chunks 已经是字符串
  */
-function createDataStreamResponse(stream: ReadableStream<string>): Response {
+function createDataStreamResponse(stream: any): Response {
   const encoder = new TextEncoder();
 
   const transformStream = new TransformStream<string, Uint8Array>({
